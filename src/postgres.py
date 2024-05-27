@@ -55,7 +55,7 @@ def main():
     hostname = 'localhost'
     database = 'demo'
     username = 'postgres'
-    password = '*************'
+    password = '************'
     port = 5432
 
     # Initialize the connector
@@ -74,7 +74,10 @@ def main():
             print(row)
 
     # Disconnect from the database
-    db_connector.disconnect()
+    if int(input("Would you like to go again? (1 = Yes, 0 = No)")) == 1:
+        db_connector.connect()
+    else:
+        db_connector.disconnect()
 
 
 if __name__ == "__main__":
