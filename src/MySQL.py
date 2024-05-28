@@ -1,8 +1,8 @@
-import psycopg2
-from psycopg2 import OperationalError
+#this file is to test if the mysql connector works. It does. 
+import mysql.connector
+from mysql.connector import Error
 
-
-class PostgresConnector:
+class MySQLConnector:
     def __init__(self, hostname, database, username, password, port):
         self.hostname = hostname
         self.database = database
@@ -14,16 +14,17 @@ class PostgresConnector:
 
     def connect(self):
         try:
-            self.connection = psycopg2.connect(
+            self.connection = mysql.connector.connect(
                 host=self.hostname,
-                dbname=self.database,
+                database=self.database,
                 user=self.username,
                 password=self.password,
                 port=self.port
             )
-            self.cursor = self.connection.cursor()
-            print("Connected to the database!")
-        except OperationalError as e:
+            if self.connection.is_connected():
+                self.cursor = self.connection.cursor()
+                print("Connected to the database!")
+        except Error as e:
             print(f"Error: {e}")
 
     def disconnect(self):
@@ -43,48 +44,37 @@ class PostgresConnector:
                 else:
                     self.connection.commit()
                     print("Query executed successfully.")
-            except OperationalError as e:
+            except Error as e:
                 print(f"Error: {e}")
         else:
             print("No active database connection.")
         return None
 
-
 def main():
     # Define the database connection parameters
     hostname = 'localhost'
-    database = 'demo'
-    username = 'postgres'
+    database = 'Parks_and_Recreation'
+    username = 'root'
     password = ''
-    port = 5432
+    port = 3306  # default MySQL port
 
     # Initialize the connector
-    db_connector = PostgresConnector(hostname, database, username, password, port)
+    db_connector = MySQLConnector(hostname, database, username, password, port)
 
     # Connect to the database
     db_connector.connect()
 
-    # Define a query
-    select_query = "SELECT * FROM public.demo_table"
+    # Define a query to test the connection
+    test_query = "SELECT * FROM employee_demographics;"
 
     # Execute the query and fetch results
-    results = db_connector.execute_query(select_query, fetch_results=True)
+    results = db_connector.execute_query(test_query, fetch_results=True)
     if results:
         for row in results:
             print(row)
 
     # Disconnect from the database
     db_connector.disconnect()
-    '''
-    # Disconnect from the database
-    if int(input("Would you like to go again? (1 = Yes, 0 = No)")) == 1:
-        db_connector.connect()
-    elif int(input("Would you like to go again? (1 = Yes, 0 = No)")) == 0:
-        db_connector.disconnect()
-    else:
-        print("Invalid input. Exiting program...")
-    '''
-
 
 if __name__ == "__main__":
     main()

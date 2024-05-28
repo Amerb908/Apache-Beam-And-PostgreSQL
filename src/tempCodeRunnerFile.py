@@ -55,7 +55,7 @@ def main():
     hostname = 'localhost'
     database = 'demo'
     username = 'postgres'
-    password = ''
+    password = 'Momnoor9696@!'
     port = 5432
 
     # Initialize the connector
