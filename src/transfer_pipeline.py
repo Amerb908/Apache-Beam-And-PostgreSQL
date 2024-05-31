@@ -10,7 +10,7 @@ postgres_config = {
     'host': 'localhost',
     'dbname': 'demo',
     'user': 'postgres',
-    'password': 'Momnoor9696@!',
+    'password': '',
     'port': 5432
 }
 
