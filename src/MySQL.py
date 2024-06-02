@@ -1,4 +1,7 @@
-#this file is to test if the mysql connector works. It does. 
+# Using Apache Beam to transfer data a CSV file to MySQL
+import apache_beam as beam
+from apache_beam.options.pipeline_options import PipelineOptions
+import pandas as pd
 import mysql.connector
 from mysql.connector import Error
 
@@ -10,7 +13,6 @@ class MySQLConnector:
         self.password = password
         self.port = port
         self.connection = None
-        self.cursor = None
 
     def connect(self):
         try:
@@ -21,60 +23,71 @@ class MySQLConnector:
                 password=self.password,
                 port=self.port
             )
-            if self.connection.is_connected():
-                self.cursor = self.connection.cursor()
-                print("Connected to the database!")
+            print('Connected to the database')
+            return self.connection
         except Error as e:
             print(f"Error: {e}")
+            return None
 
     def disconnect(self):
-        if self.cursor:
-            self.cursor.close()
         if self.connection:
             self.connection.close()
             print("Disconnected from the database.")
 
-    def execute_query(self, query, fetch_results=False):
-        if self.connection and self.cursor:
-            try:
-                self.cursor.execute(query)
-                if fetch_results:
-                    results = self.cursor.fetchall()
-                    return results
-                else:
-                    self.connection.commit()
-                    print("Query executed successfully.")
-            except Error as e:
-                print(f"Error: {e}")
-        else:
-            print("No active database connection.")
-        return None
+class WriteToMySQL(beam.DoFn):
+    def __init__(self, hostname, database, username, password, port, table_name):
+        self.hostname = hostname
+        self.database = database
+        self.username = username
+        self.password = password
+        self.port = port
+        self.table_name = table_name
 
+    def start_bundle(self):
+        self.db_connector = MySQLConnector(
+            self.hostname, self.database, self.username, self.password, self.port)
+        self.connection = self.db_connector.connect()
+        self.cursor = self.connection.cursor()
+
+    def process(self, element):
+        try:
+            columns = ', '.join([f'`{col}`' for col in element.keys()])
+            placeholders = ', '.join(['%s'] * len(element))
+            update_stmt = ', '.join([f'`{col}`=VALUES(`{col}`)' for col in element.keys() if col != 'Index'])
+            insert_stmt = f"INSERT INTO {self.table_name} ({columns}) VALUES ({placeholders}) ON DUPLICATE KEY UPDATE {update_stmt}"
+            self.cursor.execute(insert_stmt, tuple(element.values()))
+            self.connection.commit()
+        except Error as e:
+            print(f"Error: {e}")
+
+    def finish_bundle(self):
+        self.db_connector.disconnect()
+
+def run_pipeline(csv_file_path, table_name):
+    options = PipelineOptions()
+    p = beam.Pipeline(options=options)
+
+    df = pd.read_csv(csv_file_path)
+    data = df.to_dict(orient='records')
+
+    data_pcoll = p | 'Create PCollection' >> beam.Create(data)
+
+    _ = data_pcoll | 'Write to MySQL' >> beam.ParDo(WriteToMySQL(
+        hostname='localhost',
+        database='Demo_Schema',
+        username='root',
+        password='',
+        port=3306,
+        table_name=table_name
+    ))
+
+    p.run().wait_until_finish()
+    
 def main():
-    # Define the database connection parameters
-    hostname = 'localhost'
-    database = 'Parks_and_Recreation'
-    username = 'root'
-    password = ''
-    port = 3306  # default MySQL port
-
-    # Initialize the connector
-    db_connector = MySQLConnector(hostname, database, username, password, port)
-
-    # Connect to the database
-    db_connector.connect()
-
-    # Define a query to test the connection
-    test_query = "SELECT * FROM employee_demographics;"
-
-    # Execute the query and fetch results
-    results = db_connector.execute_query(test_query, fetch_results=True)
-    if results:
-        for row in results:
-            print(row)
-
-    # Disconnect from the database
-    db_connector.disconnect()
+    csv_file_path = 'Data/customers-100.csv'
+    table_name = 'customer_data'
+    run_pipeline(csv_file_path, table_name)
+    
 
 if __name__ == "__main__":
     main()

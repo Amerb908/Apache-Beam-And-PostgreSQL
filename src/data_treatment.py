@@ -1,1 +1,0 @@
-# this deals with the data, such as insert, change, delete, and even move the data to a different database

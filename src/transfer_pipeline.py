@@ -16,23 +16,31 @@ postgres_config = {
 
 mysql_config = {
     'host': 'localhost',
-    'database': 'Parks_and_Recreation',
+    'database': 'Demo_Schema',
     'user': 'root',
     'password': '',
     'port': 3306
 }
 
+# DoFn that reads data from PostgreSQL
 class PostgresSource(beam.DoFn):
     def process(self, element):
         try:
+            # Establish a connection to the PostgreSQL database
             postgres_conn = psycopg2.connect(**postgres_config)
             cursor = postgres_conn.cursor()
+
+            # Execute a query to fetch all rows from the demo_table
             cursor.execute('SELECT * FROM public.demo_table')
+            
+            # Yield each row fetched from the database
             for row in cursor.fetchall():
                 yield row
         except OperationalError as e:
+            # If there is an error connecting to the database, print the error message
             print(f'Error connecting to PostgreSQL: {e}')
         finally:
+            # Close the cursor and connection to the database
             if 'cursor' in locals():
                 cursor.close()
             if 'postgres_conn' in locals():
@@ -41,41 +49,47 @@ class PostgresSource(beam.DoFn):
 class MySQLSink(beam.DoFn):
     def process(self, element):
         try:
+            # Establish a connection to the MySQL database
             mysql_conn = mysql.connector.connect(**mysql_config)
+            
+            # Create a cursor object to interact with the database
             cursor = mysql_conn.cursor()
 
-            # Check if the record already exists
+            # Check if the record with the specified ID already exists in the demo_table
             cursor.execute(
-                'SELECT COUNT(*) FROM transferred_table WHERE id = %s',
-                (element[0],)
+                'SELECT COUNT(*) FROM demo_table WHERE id = %s',  # SQL query to count records with the specified ID
+                (element[0],)  # tuple containing the ID to check for
             )
+
+            # Fetch the result of the query (i.e., the count of records with the specified ID)
             count = cursor.fetchone()[0]
 
             if count > 0:
-                # Update the record if it exists
+                # If the record exists, update its name and address fields
                 cursor.execute(
-                    'UPDATE transferred_table SET name = %s, address = %s '
-                    'WHERE id = %s',
-                    (element[1], element[2], element[0])
+                    'UPDATE demo_table SET name = %s, address = %s '
+                    'WHERE id = %s',  # SQL query to update the record
+                    (element[1], element[2], element[0])  # tuple containing the new name, address, and ID
                 )
-                print(f'Updated dataset with ID {element[0]}')
+                print(f'Updated dataset with ID {element[0]}')  # Print a message indicating that the record was updated
             else:
-                # Insert the record if it does not exist
+                # If the record does not exist, insert a new record with the specified ID, name, and address
                 cursor.execute(
-                    'INSERT INTO transferred_table (id, name, address) '
-                    'VALUES (%s, %s, %s)',
-                    (element[0], element[1], element[2])
+                    'INSERT INTO demo_table (id, name, address) '
+                    'VALUES (%s, %s, %s)',  # SQL query to insert a new record
+                    (element[0], element[1], element[2])  # tuple containing the ID, name, and address
                 )
-                print(f'Inserted dataset with ID {element[0]}')
+                print(f'Inserted dataset with ID {element[0]}')  # Print a message indicating that the record was inserted
 
+            # Commit the changes made to the database
             mysql_conn.commit()
         except Error as e:
-            print(f'Error connecting to MySQL: {e}')
+            print(f'Error connecting to MySQL: {e}')  # Print an error message if there is an error connecting to the MySQL database
         finally:
             if 'cursor' in locals():
-                cursor.close()
+                cursor.close()  # Close the cursor object
             if 'mysql_conn' in locals():
-                mysql_conn.close()
+                mysql_conn.close()  # Close the connection to the MySQL database
 
 def run_pipeline():
     pipeline_options = PipelineOptions()
