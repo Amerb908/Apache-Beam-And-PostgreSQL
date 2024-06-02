@@ -8,5 +8,4 @@
 
 ### transfer_pipeline.py defines a pipeline that reads data from a PostgreSQL database and transfers it to a MySQL database. The pipeline uses Apache Beam to create a PCollection from the PostgreSQL table, and then uses ParDo to write the data to a MySQL table. If a record already exists in the table with the same primary key, the pipeline updates the record with the new data. Otherwise, it inserts a new record.
 
-![Alt Text](<img width="1142" alt="Screenshot 2024-05-28 at 3 37 18 PM" src="https://github.com/Amerb908/Apache-Beam-And-PostgreSQL/assets/85160636/e74e54cd-132c-439d-9fed-e430e4e8aab3">)
 
