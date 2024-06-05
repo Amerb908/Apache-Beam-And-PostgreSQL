@@ -34,6 +34,7 @@ class MySQLConnector:
             self.connection.close()
             print("Disconnected from the database.")
 
+
 class WriteToMySQL(beam.DoFn):
     def __init__(self, hostname, database, username, password, port, table_name):
         self.hostname = hostname
