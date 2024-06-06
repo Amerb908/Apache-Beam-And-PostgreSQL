@@ -1,74 +1,68 @@
+#This code sets up an Apache Beam pipeline to replicate data from a PostgreSQL database to a MySQL database, 
+# handling UPSERT operations to maintain data integrity.
 import apache_beam as beam
-from apache_beam.options.pipeline_options import PipelineOptions, StandardOptions
 import psycopg2
+import mysql.connector
+from apache_beam.options.pipeline_options import PipelineOptions
+from psycopg2 import OperationalError
+from mysql.connector import Error
 
+# Database configuration for PostgreSQL and MySQL
+postgres_config = {
+    'host': 'localhost',
+    'dbname': 'demo',
+    'user': 'postgres',
+    'password': 'Momnoor9696@!',
+    'port': 5432
+}
 
-#This replicates the pipeline from one database to another in PostgresSQL
+mysql_config = {
+    'host': 'localhost',
+    'database': 'Demo_Schema',
+    'user': 'root',
+    'password': '',
+    'port': 3306
+}
 
-class ReadFromPostgres(beam.DoFn):
-    def __init__(self, db_config):
-        self.db_config = db_config
-
-    def start_bundle(self):
-        self.conn = psycopg2.connect(**self.db_config)
-        self.cursor = self.conn.cursor()
-
+# DoFn that reads data from PostgreSQL
+class PostgresSource(beam.DoFn):
     def process(self, element):
-        self.cursor.execute("SELECT * FROM public.demo_table")
-        rows = self.cursor.fetchall()
-        for row in rows:
-            yield row
+        try:
+            with psycopg2.connect(**postgres_config) as conn:
+                with conn.cursor() as cursor:
+                    cursor.execute('SELECT * FROM public.demo_table')
+                    for row in cursor.fetchall():
+                        yield row
+        except OperationalError as e:
+            print(f'Error connecting to PostgreSQL: {e}')
 
-    def finish_bundle(self):
-        self.cursor.close()
-        self.conn.close()
-
-class WriteToPostgres(beam.DoFn):
-    def __init__(self, db_config):
-        self.db_config = db_config
-
-    def start_bundle(self):
-        self.conn = psycopg2.connect(**self.db_config)
-        self.cursor = self.conn.cursor()
-
+# DoFn for UPSERT operations in MySQL
+class MySQLSink(beam.DoFn):
     def process(self, element):
-        insert_query = "INSERT INTO public.replicas_table (id, name, address) VALUES (%s, %s, %s)"
-        self.cursor.execute(insert_query, element)  # Assuming element is a tuple with three values
-        self.conn.commit()
+        try:
+            with mysql.connector.connect(**mysql_config) as conn:
+                with conn.cursor() as cursor:
+                    sql = '''
+                    INSERT INTO demo_table (id, name, address) 
+                    VALUES (%s, %s, %s)
+                    ON DUPLICATE KEY UPDATE 
+                    name = VALUES(name), address = VALUES(address)
+                    '''
+                    cursor.execute(sql, element)
+                    conn.commit()
+                    print(f'Processed dataset with ID {element[0]}')
+        except Error as e:
+            print(f'Error connecting to MySQL: {e}')
 
-    def finish_bundle(self):
-        self.cursor.close()
-        self.conn.close()
-def run():
-    source_db_config = {
-        'host': 'localhost',
-        'dbname': 'demo',
-        'user': 'postgres',
-        'password': '',
-        'port': 5432
-    }
-    
-    target_db_config = {
-        'host': 'localhost',
-        'dbname': 'Database2',
-        'user': 'postgres',
-        'password': '',
-        'port': 5432
-    }
-
+def run_pipeline():
     options = PipelineOptions()
-    options.view_as(StandardOptions).streaming = True
-
-    p1 = beam.Pipeline(options=options)
-
-    (p1
-     | 'ReadFromPostgres' >> beam.Create([None])
-     | 'FetchData' >> beam.ParDo(ReadFromPostgres(source_db_config))
-     | 'WriteToPostgres' >> beam.ParDo(WriteToPostgres(target_db_config))
-    )
-
-    result = p1.run()
-    result.wait_until_finish()
+    with beam.Pipeline(options=options) as pipeline:
+        data = (
+            pipeline
+            | 'Create Dummy Source' >> beam.Create([None])  # Trigger to start the pipeline
+            | 'Read from Postgres' >> beam.ParDo(PostgresSource())
+            | 'Write to MySQL' >> beam.ParDo(MySQLSink())
+        )
 
 if __name__ == '__main__':
-    run()
+    run_pipeline()
